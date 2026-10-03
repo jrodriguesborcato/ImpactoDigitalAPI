@@ -5,13 +5,26 @@ import ordersRouter from './routes/orders.js';
 import webhooksRouter from './routes/webhooks.js';
 
 const app = express();
+const frontendOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin(origin, callback) {
+    if (!origin || frontendOrigins.length === 0 || frontendOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origem não autorizada pelo CORS.'));
+  },
   methods: ['GET', 'POST'],
 }));
 
-app.use(express.json());
+app.use(express.json({
+  verify(req, _res, buffer) {
+    req.rawBody = Buffer.from(buffer);
+  },
+}));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/orders', ordersRouter);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Copy, Check, Loader2, CreditCard, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { createOrder, type OrderResponse } from '@/lib/api';
 import type { Category } from '@/data/constants';
 
@@ -43,6 +44,7 @@ export default function CheckoutModal({ platform, category, pkg, onClose }: Chec
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [cpf, setCpf] = useState('');
+  const [phone, setPhone] = useState('');
   const [target] = useState(() => {
     const el = document.querySelector<HTMLInputElement>(`[data-pkg="${pkg.id}"]`);
     return el?.value ?? '';
@@ -65,7 +67,14 @@ export default function CheckoutModal({ platform, category, pkg, onClose }: Chec
         package_id: pkg.id,
         target: target || name,
         payment_method: method,
-        customer: { name, email, cpf: cpf.replace(/\D/g, '') },
+        customer: { name, email, cpf: cpf.replace(/\D/g, ''), phone: phone.replace(/\D/g, '') },
+        ...(method === 'credit_card' && {
+          device: {
+            user_agent: window.navigator.userAgent,
+            page_url: window.location.href,
+            metadata: {},
+          },
+        }),
         ...(method === 'credit_card' && {
           card: {
             number: cardNumber.replace(/\s/g, ''),
@@ -93,9 +102,10 @@ export default function CheckoutModal({ platform, category, pkg, onClose }: Chec
   }
 
   const categoryLabel: Record<Category, string> = {
-    followers: 'seguidores',
-    likes: 'curtidas',
-    views: 'visualizações',
+    followers_mundial: 'seguidores',
+    followers_br: 'seguidores',
+    likes_mundial: 'curtidas',
+    views_reels: 'visualizações',
   };
 
   return (
@@ -155,6 +165,15 @@ export default function CheckoutModal({ platform, category, pkg, onClose }: Chec
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-secondary border border-border rounded-lg h-10 px-3 text-sm focus:outline-none focus:border-primary transition-all placeholder:text-muted-foreground/60"
+              />
+              <input
+                required
+                type="tel"
+                placeholder="Telefone com DDD"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                autoComplete="tel-national"
                 className="w-full bg-secondary border border-border rounded-lg h-10 px-3 text-sm focus:outline-none focus:border-primary transition-all placeholder:text-muted-foreground/60"
               />
               <input
@@ -245,9 +264,20 @@ export default function CheckoutModal({ platform, category, pkg, onClose }: Chec
                 <div>
                   <h3 className="font-display font-bold text-lg">PIX gerado!</h3>
                   <p className="text-muted-foreground text-sm mt-1">
-                    Copie o código abaixo e pague no seu banco. Pedido inicia em até 5 minutos após confirmação.
+                    Escaneie o QR Code ou copie o código abaixo. O pedido inicia após a confirmação do pagamento.
                   </p>
                 </div>
+                {result.pix_code && (
+                  <div className="mx-auto w-fit rounded-xl bg-white p-3">
+                    <QRCodeSVG
+                      value={result.pix_code}
+                      size={192}
+                      level="M"
+                      includeMargin
+                      aria-label="QR Code para pagamento PIX"
+                    />
+                  </div>
+                )}
                 <div className="bg-secondary rounded-xl p-3 text-left">
                   <p className="text-xs text-muted-foreground mb-2">Código PIX copia e cola</p>
                   <p className="text-xs break-all font-mono text-foreground/80 leading-relaxed">

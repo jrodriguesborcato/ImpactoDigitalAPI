@@ -6,7 +6,8 @@ export interface OrderPayload {
   package_id: number;
   target: string;
   payment_method: 'pix' | 'credit_card';
-  customer: { name: string; email: string; cpf: string };
+  customer: { name: string; email: string; cpf: string; phone: string };
+  device?: { user_agent: string; page_url: string; metadata: Record<string, unknown> };
   card?: {
     number: string;
     holder_name: string;

@@ -77,7 +77,8 @@ function validateOrderBody(body) {
   if (!PACKAGES[category].find((p) => p.id === Number(package_id))) return 'Pacote não encontrado.';
   if (!target || target.trim().length < 2) return 'Usuário/link obrigatório.';
   if (!payment_method || !['pix', 'credit_card'].includes(payment_method)) return 'Método de pagamento inválido.';
-  if (!customer?.name || !customer?.email || !customer?.cpf) return 'Dados do cliente obrigatórios (name, email, cpf).';
+  if (!customer?.name || !customer?.email || !customer?.cpf || !customer?.phone) return 'Dados do cliente obrigatórios (name, email, cpf, phone).';
+  if (!/^\d{10,11}$/.test(customer.phone.replace(/\D/g, ''))) return 'Telefone inválido.';
   return null;
 }
 
@@ -118,16 +119,16 @@ router.post('/', async (req, res) => {
   try {
     if (payment_method === 'pix') {
       const pixData = await createPixCharge({
-        externalId,
         amountCents: pkg.price_cents,
         customer,
         description,
       });
+      const transactionId = pixData.identifier ?? pixData.transaction_id ?? pixData.id;
 
       await supabase
         .from('orders')
         .update({
-          syncpay_transaction_id: pixData.transaction_id ?? pixData.id,
+          syncpay_transaction_id: transactionId,
           syncpay_pix_code: pixData.pix_code ?? pixData.qr_code,
           syncpay_pix_expiration: pixData.expiration,
         })
@@ -148,26 +149,34 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Dados do cartão incompletos.' });
       }
 
-      const { token } = await tokenizeCard({
+      const tokenData = await tokenizeCard({
         number: card.number.replace(/\s/g, ''),
         holderName: card.holder_name,
         expiryMonth: card.expiry_month,
         expiryYear: card.expiry_year,
         cvv: card.cvv,
       });
+      const cardToken = tokenData.data?.token ?? tokenData.token;
+      if (!cardToken) throw new Error('SyncPay não retornou o token do cartão.');
 
       const chargeData = await createCardCharge({
         externalId,
         amountCents: pkg.price_cents,
-        cardToken: token,
+        cardToken,
         customer,
         description,
-        device: { ip: req.ip },
+        device: {
+          ip: req.ip,
+          user_agent: req.body.device?.user_agent || req.get('user-agent'),
+          page_url: req.body.device?.page_url || process.env.FRONTEND_URL,
+          metadata: req.body.device?.metadata || {},
+        },
       });
+      const transactionId = chargeData.data?.transaction_id ?? chargeData.transaction_id ?? chargeData.id;
 
       await supabase
         .from('orders')
-        .update({ syncpay_transaction_id: chargeData.transaction_id ?? chargeData.id })
+        .update({ syncpay_transaction_id: transactionId })
         .eq('id', order.id);
 
       return res.status(201).json({
@@ -175,7 +184,7 @@ router.post('/', async (req, res) => {
         external_id: externalId,
         payment_method: 'credit_card',
         payment_status: 'pending',
-        transaction_id: chargeData.transaction_id ?? chargeData.id,
+        transaction_id: transactionId,
         amount: pkg.price_cents,
       });
     }

@@ -52,43 +52,46 @@ async function request(method, path, body) {
   return data;
 }
 
-export async function createPixCharge({ externalId, amountCents, customer, description }) {
-  // Endpoint PIX do SyncPay — confirme em https://blog.syncpayments.com.br/ajuda/
-  return request('POST', '/api/partner/v1/pix', {
-    reference_id: externalId,
-    amount: amountCents,
+export async function createPixCharge({ amountCents, customer, description }) {
+  return request('POST', '/api/partner/v1/cash-in', {
+    amount: Number((amountCents / 100).toFixed(2)),
     description,
     client: {
       name: customer.name,
       email: customer.email,
-      tax_id: customer.cpf,
+      cpf: customer.cpf.replace(/\D/g, ''),
+      phone: customer.phone.replace(/\D/g, ''),
     },
-    expiration: 3600, // 1 hora em segundos
   });
 }
 
 export async function tokenizeCard({ number, holderName, expiryMonth, expiryYear, cvv }) {
   return request('POST', '/api/partner/v1/card-tokens', {
-    number,
-    holder_name: holderName,
-    expiry_month: expiryMonth,
-    expiry_year: expiryYear,
-    cvv,
+    card: {
+      number,
+      holder_name: holderName,
+      expiry_month: expiryMonth,
+      expiry_year: expiryYear,
+      cvv,
+    },
   });
 }
 
 export async function createCardCharge({ externalId, amountCents, cardToken, customer, description, device }) {
   return request('POST', '/api/partner/v1/credit-card', {
-    reference_id: externalId,
-    amount: amountCents,
+    amount: Number((amountCents / 100).toFixed(2)),
     description,
     card: { token: cardToken },
     client: {
       name: customer.name,
       email: customer.email,
-      tax_id: customer.cpf,
+      phone: `55${customer.phone.replace(/\D/g, '')}`,
+      document: {
+        type: 'cpf',
+        number: customer.cpf.replace(/\D/g, ''),
+      },
     },
-    device: device || { ip: '0.0.0.0' },
+    device,
   });
 }
 
